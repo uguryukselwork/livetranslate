@@ -1,7 +1,5 @@
-// Ephemeral, never-stored signals for one room over Supabase Realtime:
-// "yazıyor…" (typing), who is in the voice call (presence), and the voice call's translated audio + live captions.
-import type { RealtimeChannel } from '@supabase/supabase-js';
-import { supabase } from './supabase';
+// Ephemeral signals for one room over local Express SSE:
+// "yazıyor…" (typing), who is in the voice call, and the voice call's translated audio + live captions.
 
 /** 'paid' speakers relay translated audio; 'free' speakers' sentences are read aloud by the listener */
 export interface CallMember {
@@ -28,49 +26,67 @@ export interface LiveChannel {
 }
 
 export function joinLiveChannel(roomId: string, userId: string, handlers: LiveHandlers): LiveChannel {
-  let inCall = false;
-  let engine: 'free' | 'paid' = 'free';
-  let ready = false;
+  const eventSource = new EventSource(`/api/rooms/${roomId}/events`);
+  
+  // Track call members locally since we don't have real Supabase Presence
+  let callMembers: CallMember[] = [];
 
-  const channel: RealtimeChannel = supabase.channel(`live:${roomId}`, {
-    config: { presence: { key: userId }, broadcast: { self: false } },
+  eventSource.addEventListener('typing', (e: any) => {
+    const payload = JSON.parse(e.data);
+    if (payload.from !== userId) {
+      handlers.onTyping(payload.from, !!payload.typing);
+    }
   });
 
-  const track = () => { if (ready) void channel.track({ inCall, engine }); };
+  eventSource.addEventListener('audio', (e: any) => {
+    const payload = JSON.parse(e.data);
+    if (payload.from !== userId) {
+      handlers.onAudio(payload.from, payload.data);
+    }
+  });
 
-  channel
-    .on('broadcast', { event: 'typing' }, ({ payload }) => handlers.onTyping(payload.from, !!payload.typing))
-    .on('broadcast', { event: 'audio' }, ({ payload }) => handlers.onAudio(payload.from, payload.data))
-    .on('broadcast', { event: 'caption' }, ({ payload }) => handlers.onCaption(payload.from, payload.text ?? ''))
-    .on('presence', { event: 'sync' }, () => {
-      const state = channel.presenceState<{ inCall?: boolean; engine?: 'free' | 'paid' }>();
-      const members: CallMember[] = [];
-      for (const id of Object.keys(state)) {
-        const entry = state[id].find(p => p.inCall);
-        if (entry) members.push({ userId: id, engine: entry.engine === 'paid' ? 'paid' : 'free' });
-      }
-      handlers.onCallMembers(members);
-    })
-    .subscribe((status) => {
-      if (status === 'SUBSCRIBED') {
-        ready = true;
-        track();
-      }
-    });
+  eventSource.addEventListener('caption', (e: any) => {
+    const payload = JSON.parse(e.data);
+    if (payload.from !== userId) {
+      handlers.onCaption(payload.from, payload.text ?? '');
+    }
+  });
 
-  const send = (event: string, payload: Record<string, unknown>) => {
-    if (ready) void channel.send({ type: 'broadcast', event, payload: { from: userId, ...payload } });
+  eventSource.addEventListener('call_sync', (e: any) => {
+    const payload = JSON.parse(e.data);
+    if (payload.from !== userId) {
+      // Very simple presence mock: update the list when someone else joins/leaves a call
+      const other: CallMember = { userId: payload.from, engine: payload.engine };
+      if (payload.inCall) {
+        callMembers = [...callMembers.filter(m => m.userId !== other.userId), other];
+      } else {
+        callMembers = callMembers.filter(m => m.userId !== other.userId);
+      }
+      handlers.onCallMembers(callMembers);
+    }
+  });
+
+  const send = async (event: string, payload: Record<string, unknown>) => {
+    try {
+      await fetch(`/api/rooms/${roomId}/broadcast`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ event, payload: { from: userId, ...payload } })
+      });
+    } catch (e) {
+      console.error('Broadcast failed', e);
+    }
   };
 
   return {
     setTyping: (typing) => send('typing', { typing }),
-    setInCall: (value, withEngine) => {
-      inCall = value;
-      if (withEngine) engine = withEngine;
-      track();
+    setInCall: (inCall, engine = 'free') => {
+      send('call_sync', { inCall, engine });
     },
     sendAudio: (data) => send('audio', { data }),
     sendCaption: (text) => send('caption', { text }),
-    leave: () => { void supabase.removeChannel(channel); },
+    leave: () => {
+      eventSource.close();
+    },
   };
 }

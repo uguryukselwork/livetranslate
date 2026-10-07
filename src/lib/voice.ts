@@ -2,7 +2,6 @@
 // My microphone streams to Gemini Live Translate, which returns my speech translated into the partner's
 // language as audio (relayed to the partner) plus both transcripts (saved as a chat message per sentence).
 import type { Session } from '@google/genai';
-import { supabase } from './supabase';
 import { getAudioContext } from './utils';
 
 const INPUT_RATE = 16000;
@@ -259,16 +258,25 @@ export class VoiceTranslator implements VoiceEngine {
   }
 
   private async connect() {
-    const { data, error } = await supabase.functions.invoke('live-token', {
-      body: { room_id: this.opts.roomId, target_language: this.opts.targetLanguage },
+    const res = await fetch('/api/live-token', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ room_id: this.opts.roomId, target_language: this.opts.targetLanguage })
     });
-    if (error || !data?.token) {
-      const reason = await (error as { context?: Response } | null)?.context?.json?.().then((b: { error?: string }) => b.error).catch(() => undefined);
+    
+    if (!res.ok) {
+      const errorData = await res.json().catch(() => ({}));
+      const reason = errorData.error;
       throw new Error(
         reason === 'vip_required' ? 'VIP üyelik gerekli'
         : reason === 'vip_off' ? 'VIP sesli çeviri şu an kapalı'
         : 'Sesli çeviri başlatılamadı'
       );
+    }
+    
+    const data = await res.json();
+    if (!data?.token) {
+      throw new Error('Sesli çeviri başlatılamadı');
     }
     if (!this.active) return;
 

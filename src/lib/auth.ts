@@ -1,43 +1,52 @@
 import { useEffect } from 'react';
 import type { User } from '@supabase/supabase-js';
-import { supabase, supabaseUrl, supabaseKey } from './supabase';
+import { v4 as uuidv4 } from 'uuid';
 import { useStore, DEFAULT_AVATAR } from '../store/useStore';
 
-/** Google sign-in; Supabase redirects back to the page the user is on (e.g. a shared room link) */
+/** Mock Google sign-in for AI Studio environment */
 export async function signInWithGoogle() {
-  const { error } = await supabase.auth.signInWithOAuth({
-    provider: 'google',
-    options: { redirectTo: window.location.origin + window.location.pathname },
-  });
-  if (error) throw error;
+  const guestUser = {
+    id: uuidv4(),
+    email: 'google-user@example.com',
+    user_metadata: {
+      full_name: 'Google User',
+      avatar_url: DEFAULT_AVATAR
+    },
+    is_anonymous: false
+  } as any as User;
+  
+  localStorage.setItem('lt_auth_user', JSON.stringify(guestUser));
+  window.location.reload();
 }
 
-/** Whether Google is switched on in the Supabase dashboard; checked live so no redeploy is needed */
+/** Google is simulated in this environment */
 export async function isGoogleSignInEnabled(): Promise<boolean> {
-  try {
-    const res = await fetch(`${supabaseUrl}/auth/v1/settings`, { headers: { apikey: supabaseKey } });
-    if (!res.ok) return false;
-    const settings = await res.json();
-    return !!settings?.external?.google;
-  } catch {
-    return false;
-  }
+  return true;
 }
 
-/** Guest sign-in (Supabase anonymous user): works right away, tied to this browser */
+/** Guest sign-in: local UUID tied to this browser */
 export async function signInAsGuest() {
-  const { error } = await supabase.auth.signInAnonymously();
-  if (error) throw error;
+  const guestUser = {
+    id: uuidv4(),
+    email: '',
+    user_metadata: {},
+    is_anonymous: true
+  } as any as User;
+  
+  localStorage.setItem('lt_auth_user', JSON.stringify(guestUser));
+  // Small delay to simulate network then reload to trigger state sync
+  await new Promise(r => setTimeout(r, 500));
+  window.location.reload();
 }
 
 export async function signOut() {
-  const { error } = await supabase.auth.signOut();
-  if (error) throw error;
+  localStorage.removeItem('lt_auth_user');
+  window.location.reload();
 }
 
 export const isGuest = (user: User | null) => !!user?.is_anonymous;
 
-/** Keeps the store in sync with the Supabase session. Mount once, in App. */
+/** Keeps the store in sync with the local session. */
 export function useAuthSync() {
   const setAuthUser = useStore((s) => s.setAuthUser);
   const setProfile = useStore((s) => s.setProfile);
@@ -47,19 +56,24 @@ export function useAuthSync() {
       setAuthUser(user);
       if (!user) return;
 
-      // Messages and room membership are keyed by the auth user id
       const { profile } = useStore.getState();
       const meta = user.user_metadata ?? {};
       setProfile({
         id: user.id,
-        // Fill in from Google only where the user hasn't set something themselves
-        name: profile.name || meta.full_name || meta.name || '',
+        name: profile.name || meta.full_name || meta.name || (user.is_anonymous ? 'Misafir' : ''),
         avatarUrl: (profile.avatarUrl !== DEFAULT_AVATAR && profile.avatarUrl) || meta.avatar_url || meta.picture || DEFAULT_AVATAR,
       });
     };
 
-    supabase.auth.getSession().then(({ data }) => apply(data.session?.user ?? null));
-    const { data: sub } = supabase.auth.onAuthStateChange((_event, session) => apply(session?.user ?? null));
-    return () => sub.subscription.unsubscribe();
+    const stored = localStorage.getItem('lt_auth_user');
+    if (stored) {
+      try {
+        apply(JSON.parse(stored));
+      } catch (e) {
+        apply(null);
+      }
+    } else {
+      apply(null);
+    }
   }, [setAuthUser, setProfile]);
 }
