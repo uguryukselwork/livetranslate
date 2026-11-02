@@ -262,6 +262,7 @@ export default function Room() {
       const input = participantInput();
       const sent = await sendMessage({
         room_id: roomId,
+        sender_id: profile.id,
         sender_name: input.name,
         sender_gender: input.gender,
         sender_avatar: input.avatarUrl,

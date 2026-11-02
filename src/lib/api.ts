@@ -75,7 +75,7 @@ export async function requestTranslation(messageId: string, spoken?: string) {
 
 export async function sendMessage(msg: {
   room_id: string;
-  sender_id: string; // Added sender_id which server.ts expects
+  sender_id?: string;
   sender_name: string;
   sender_gender: string | null;
   sender_avatar: string | null;
@@ -84,11 +84,11 @@ export async function sendMessage(msg: {
   target_language: string;
   reply_to_id?: string | null;
   is_voice?: boolean;
-}): Promise<MessageType> {
+}, spoken?: string): Promise<MessageType> {
   const res = await fetch(`/api/rooms/${msg.room_id}/messages`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(msg)
+    body: JSON.stringify({ ...msg, spoken })
   });
   if (!res.ok) throw new Error('Message send failed');
   return res.json();
