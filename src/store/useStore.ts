@@ -8,7 +8,7 @@ import { ColorThemeId, ChatPatternId, BubbleColorId, themeForGender } from '../l
 export type Gender = 'male' | 'female';
 
 // Served from public/; everyone starts with this picture until they pick their own
-export const DEFAULT_AVATAR = '/default-avatar.jpg';
+export const DEFAULT_AVATAR = '/default-avatar.jpg?v=3';
 
 export interface SavedRoom {
   code: string;

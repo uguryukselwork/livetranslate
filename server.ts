@@ -60,8 +60,12 @@ async function startServer() {
     return map[code] || code;
   };
 
-  // Track if Gemini is hitting quota/spending limits
+  // In-memory cache for translations
+  const translationCache = new Map<string, { text: string; detectedLanguage?: string }>();
+
+  // Track if engines are hitting quota/rate limits
   let geminiDisabledUntil = 0;
+  let googleWebDisabledUntil = 0;
 
   const translateText = async (
     originalText: string,
@@ -76,49 +80,70 @@ async function startServer() {
     const target = targetLanguage || 'tr';
     const source = originalLanguage && originalLanguage !== 'auto' ? originalLanguage : undefined;
 
-    console.log(`[Translate] Starting: "${text}" from ${source || 'auto'} to ${target}`);
-
     // If source and target language are explicitly identical
     if (source && source.toLowerCase() === target.toLowerCase()) {
-      console.log(`[Translate] Source and target are same (${source}). Skipping.`);
       return { text, detectedLanguage: source };
     }
 
-    // 1. Try Google Translate Web engine (Reliable & fast for testing)
-    try {
-      console.log(`[Translate] Trying Engine 1 (Google Web)...`);
-      const sl = source || 'auto';
-      const tl = target;
-      const url = `https://translate.googleapis.com/translate_a/single?client=tw-ob&sl=${sl}&tl=${tl}&dt=t&q=${encodeURIComponent(text)}`;
-      const res = await fetch(url, {
-        headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)' },
-        signal: AbortSignal.timeout(5000)
-      });
-      if (res.ok) {
-        const data: any = await res.json();
-        if (Array.isArray(data?.[0])) {
-          const translated = data[0].map((item: any) => item[0]).join('');
-          const detected = data[2];
-          if (translated && translated !== text) {
-            console.log(`[Translate] Engine 1 success: "${translated}"`);
-            return { text: translated, detectedLanguage: detected || source };
-          }
-        }
-      } else {
-        console.warn(`[Translate] Engine 1 failed with status: ${res.status}`);
-      }
-    } catch (err: any) {
-      console.warn('[Translate] Engine 1 error:', err?.message || err);
+    const cacheKey = `${source || 'auto'}:${target}:${text}`;
+    const cached = translationCache.get(cacheKey);
+    if (cached) {
+      return cached;
     }
 
-    // 2. Try Gemini API
-    for (const model of ['gemini-flash-latest', 'gemini-3.8-flash', 'gemini-3.1-pro-preview']) {
-      if (!ai) break;
-      if (Date.now() <= geminiDisabledUntil) break;
+    console.log(`[Translate] Starting: "${text}" from ${source || 'auto'} to ${target}`);
 
+    // 1. Try Google Translate Engine (using translate.google.com POST endpoint)
+    if (Date.now() > googleWebDisabledUntil) {
       try {
-        console.log(`[Translate] Trying Engine 2 (Gemini ${model})...`);
-        const prompt = `You are a professional translator. 
+        console.log(`[Translate] Trying Engine 1 (Google Translate)...`);
+        const sl = source || 'auto';
+        const tl = target;
+        const params = new URLSearchParams();
+        params.append('sl', sl);
+        params.append('tl', tl);
+        params.append('q', text);
+
+        const res = await fetch('https://translate.google.com/translate_a/single?client=at&dt=t&dj=1', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/x-www-form-urlencoded;charset=utf-8',
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+          },
+          body: params,
+          signal: AbortSignal.timeout(5000)
+        });
+
+        if (res.ok) {
+          const data: any = await res.json();
+          const translated = data?.sentences
+            ?.filter((s: any) => 'trans' in s)
+            ?.map((s: any) => s.trans)
+            ?.join('');
+          const detected = data?.src;
+          if (translated) {
+            console.log(`[Translate] Engine 1 success: "${translated}"`);
+            const out = { text: translated, detectedLanguage: detected || source };
+            translationCache.set(cacheKey, out);
+            return out;
+          }
+        } else {
+          if (res.status === 429) {
+            googleWebDisabledUntil = Date.now() + 5 * 60 * 1000;
+          }
+          console.log(`[Translate] Engine 1 returned status ${res.status}`);
+        }
+      } catch (err: any) {
+        console.log('[Translate] Engine 1 request error:', err?.message || err);
+      }
+    }
+
+    // 2. Try Gemini API if key is present
+    if (ai && Date.now() > geminiDisabledUntil) {
+      for (const model of ['gemini-3.8-flash', 'gemini-1.5-flash', 'gemini-3.1-pro-preview']) {
+        try {
+          console.log(`[Translate] Trying Engine 2 (Gemini ${model})...`);
+          const prompt = `You are a professional translator. 
 Translate the following text into ${getLanguageName(target)}.
 ${source ? `The source language is ${getLanguageName(source)}.` : 'Automatically detect the source language.'}
 
@@ -127,24 +152,26 @@ Respond ONLY with the translated text. Do not include any explanations.
 Text to translate:
 "${text}"`;
 
-        // AbortSignal is not supported by generateContent directly in some versions,
-        // so we wrap it in a timeout promise if needed, but let's try standard first.
-        const response = await ai.models.generateContent({
-          model,
-          contents: prompt,
-        });
-        
-        const translatedText = (response.text || '').trim().replace(/^["']|["']$/g, '');
-        
-        if (translatedText && translatedText !== text) {
-          console.log(`[Translate] Engine 2 success (${model}): "${translatedText}"`);
-          return { text: translatedText, detectedLanguage: source || 'detected' };
-        }
-      } catch (err: any) {
-        const msg = err?.message || '';
-        console.warn(`[Translate] Engine 2 failure (${model}):`, msg);
-        if (msg.includes('RESOURCE_EXHAUSTED') || msg.includes('spending cap')) {
-          geminiDisabledUntil = Date.now() + 10 * 60 * 1000;
+          const response = await ai.models.generateContent({
+            model,
+            contents: prompt,
+          });
+          
+          const translatedText = (response.text || '').trim().replace(/^["']|["']$/g, '');
+          
+          if (translatedText && translatedText !== text) {
+            console.log(`[Translate] Engine 2 success (${model}): "${translatedText}"`);
+            const out = { text: translatedText, detectedLanguage: source || 'detected' };
+            translationCache.set(cacheKey, out);
+            return out;
+          }
+        } catch (err: any) {
+          const msg = err?.message || '';
+          console.log(`[Translate] Engine 2 notice (${model}):`, msg);
+          if (msg.includes('RESOURCE_EXHAUSTED') || msg.includes('spending cap') || msg.includes('PERMISSION_DENIED')) {
+            geminiDisabledUntil = Date.now() + 10 * 60 * 1000;
+            break;
+          }
         }
       }
     }
@@ -167,28 +194,30 @@ Text to translate:
             .replace(/&lt;/g, '<')
             .replace(/&gt;/g, '>');
           console.log(`[Translate] Engine 3 success: "${decoded}"`);
-          return { text: decoded, detectedLanguage: data.responseData?.detectedLanguage || source };
+          const out = { text: decoded, detectedLanguage: data.responseData?.detectedLanguage || source };
+          translationCache.set(cacheKey, out);
+          return out;
         }
       }
     } catch (err: any) {
-      console.warn('[Translate] Engine 3 error:', err?.message || err);
+      console.log('[Translate] Engine 3 error:', err?.message || err);
     }
 
-    console.warn(`[Translate] All engines failed. Returning original.`);
+    console.log(`[Translate] All engines exhausted. Returning original.`);
     return { text };
   };
 
   if (ai) {
     console.log('[Server] Gemini AI client initialized.');
-    // Test translation on startup
-    void translateText('Hello', 'en', 'tr').then(res => {
-      console.log(`[Server] Startup translation test (Hello -> tr): ${res.text}`);
-    }).catch(err => {
-      console.error('[Server] Startup translation test failed:', err);
-    });
   } else {
-    console.warn('[Server] Gemini AI client NOT initialized. GEMINI_API_KEY is missing.');
+    console.log('[Server] Gemini AI client not configured. Defaulting to Google Translate web engine.');
   }
+
+  void translateText('Hello', 'en', 'tr').then(res => {
+    console.log(`[Server] Startup translation test (Hello -> tr): ${res.text}`);
+  }).catch(err => {
+    console.error('[Server] Startup translation test failed:', err);
+  });
 
   // --- API ENDPOINTS ---
 
@@ -354,7 +383,7 @@ Text to translate:
     // For local development, we return the key and standard config
     res.json({
       token: process.env.GEMINI_API_KEY,
-      model: 'gemini-3.8-live', // Use a real model that supports Live API
+      model: 'gemini-2.0-flash-exp', // Use a real model that supports Live API
       config: {
         generationConfig: {
           responseModalities: ['audio'],

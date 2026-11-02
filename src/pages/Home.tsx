@@ -134,7 +134,12 @@ export default function Home() {
     }
   };
 
-  const getAvatarImage = () => profile.avatarUrl || null;
+  const getAvatarImage = () => {
+    if (!profile.avatarUrl || profile.avatarUrl.startsWith('/default-avatar.jpg')) {
+      return '/default-avatar.jpg?v=3';
+    }
+    return profile.avatarUrl;
+  };
 
   const [nameSaved, setNameSaved] = useState(false);
   const nameDirty = name.trim() !== (profile.name || '');
