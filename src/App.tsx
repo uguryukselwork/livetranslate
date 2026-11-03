@@ -96,6 +96,15 @@ export default function App() {
     document.documentElement.setAttribute('data-font-size', fontSize || 'medium');
   }, [fontSize]);
 
+  const gender = useStore((state) => state.profile.gender);
+  React.useEffect(() => {
+    if (gender) {
+      document.documentElement.setAttribute('data-gender', gender);
+    } else {
+      document.documentElement.removeAttribute('data-gender');
+    }
+  }, [gender]);
+
   const fontClass = fontFamily === 'serif' ? 'font-app-serif' : fontFamily === 'mono' ? 'font-app-mono' : 'font-app-sans';
 
   React.useEffect(() => {
@@ -118,7 +127,7 @@ export default function App() {
   return (
     <BrowserRouter>
       <div className={`h-[100dvh] w-full app-outer-bg text-(--theme-ink) ${fontClass} selection:bg-(--theme-accent-light) selection:text-(--theme-ink) flex justify-center overflow-hidden`}>
-        <div className="w-full max-w-md h-full app-page-bg shadow-2xl overflow-hidden flex flex-col relative">
+        <div className="w-full max-w-2xl h-full app-page-bg shadow-2xl overflow-hidden flex flex-col relative">
           <Routes>
             <Route path="/profile" element={<Profile />} />
             <Route path="/" element={<Home />} />

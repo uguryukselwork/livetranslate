@@ -14,7 +14,11 @@ const __dirname = path.dirname(__filename);
 const db = {
   rooms: [] as any[],
   participants: [] as any[],
-  messages: [] as any[]
+  messages: [] as any[],
+  admin: {
+    announcement: "Tüm kullanıcılara duyuru\nVIP üyelik şimdilik herkese bedava! 🎉",
+    vip_access_mode: 'everyone' as 'members' | 'everyone' | 'off'
+  }
 };
 
 // SSE clients for real-time updates
@@ -129,7 +133,7 @@ async function startServer() {
           }
         } else {
           if (res.status === 429) {
-            googleWebDisabledUntil = Date.now() + 5 * 60 * 1000;
+            googleWebDisabledUntil = Date.now() + 10 * 60 * 1000;
           }
           console.log(`[Translate] Engine 1 returned status ${res.status}`);
         }
@@ -138,9 +142,8 @@ async function startServer() {
       }
     }
 
-    // 2. Try Gemini API if key is present
     if (ai && Date.now() > geminiDisabledUntil) {
-      for (const model of ['gemini-3.8-flash', 'gemini-1.5-flash', 'gemini-3.1-pro-preview']) {
+      for (const model of ['gemini-1.5-flash', 'gemini-2.5-flash', 'gemini-1.5-pro', 'gemini-3.8-flash']) {
         try {
           console.log(`[Translate] Trying Engine 2 (Gemini ${model})...`);
           const prompt = `You are a professional translator. 
@@ -154,10 +157,9 @@ Text to translate:
 
           const response = await ai.models.generateContent({
             model,
-            contents: prompt,
+            contents: [{ role: 'user', parts: [{ text: prompt }] }]
           });
-          
-          const translatedText = (response.text || '').trim().replace(/^["']|["']$/g, '');
+          const translatedText = response.text.trim().replace(/^["']|["']$/g, '');
           
           if (translatedText && translatedText !== text) {
             console.log(`[Translate] Engine 2 success (${model}): "${translatedText}"`);
@@ -169,7 +171,9 @@ Text to translate:
           const msg = err?.message || '';
           console.log(`[Translate] Engine 2 notice (${model}):`, msg);
           if (msg.includes('RESOURCE_EXHAUSTED') || msg.includes('spending cap') || msg.includes('PERMISSION_DENIED')) {
-            geminiDisabledUntil = Date.now() + 10 * 60 * 1000;
+            const isDailyLimit = msg.includes('per day limit exceeded');
+            // If it is a daily limit, wait 6 hours before trying again
+            geminiDisabledUntil = Date.now() + (isDailyLimit ? 360 : 10) * 60 * 1000;
             break;
           }
         }
@@ -383,7 +387,7 @@ Text to translate:
     // For local development, we return the key and standard config
     res.json({
       token: process.env.GEMINI_API_KEY,
-      model: 'gemini-2.0-flash-exp', // Use a real model that supports Live API
+      model: 'gemini-2.0-flash-exp', // Live API WebSocket model
       config: {
         generationConfig: {
           responseModalities: ['audio'],
@@ -398,11 +402,66 @@ Text to translate:
     });
   });
 
+  app.get('/api/announcement', (req, res) => {
+    res.json({ text: db.admin.announcement });
+  });
+
+  app.post('/api/admin/announcement', (req, res) => {
+    const { text } = req.body;
+    db.admin.announcement = text;
+    res.json({ success: true });
+  });
+
+  app.get('/api/admin/vip-access', (req, res) => {
+    res.json({ mode: db.admin.vip_access_mode });
+  });
+
+  app.post('/api/admin/vip-access', (req, res) => {
+    const { mode } = req.body;
+    db.admin.vip_access_mode = mode;
+    res.json({ success: true });
+  });
+
+  app.get('/api/vip-status/:userId', (req, res) => {
+    const { userId } = req.params;
+    // In local dev, we check the global mode
+    const isEveryoneVip = db.admin.vip_access_mode === 'everyone';
+    res.json({
+      access: db.admin.vip_access_mode,
+      vipUntil: isEveryoneVip ? new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString() : null,
+      canUseVip: isEveryoneVip,
+      balanceUsd: 100,
+      vipSeconds: 36000,
+    });
+  });
+
+  app.post('/api/admin/check-pin', (req, res) => {
+    // Pin is 4958 for local dev
+    const { pin } = req.body;
+    res.json({ valid: pin === '4958' });
+  });
+
+  app.get('/api/admin/overview', (req, res) => {
+    res.json({
+      vip_access: db.admin.vip_access_mode,
+      vip_members: db.participants.filter(p => p.is_vip).length,
+      requests: [],
+      users: db.participants.map(p => ({
+        user_id: p.user_id,
+        name: p.name,
+        last_seen: p.last_seen,
+        vip_until: p.is_vip ? new Date().toISOString() : null,
+        balance_usd: 100,
+        vip_seconds: 36000
+      }))
+    });
+  });
+
   // Serve static files in production, or use Vite middleware in dev
   if (process.env.NODE_ENV === 'production') {
     const distPath = path.join(process.cwd(), 'dist');
     app.use(express.static(distPath));
-    app.get('*', (req, res) => {
+    app.get(/.*/, (req, res) => {
       res.sendFile(path.join(distPath, 'index.html'));
     });
   } else {

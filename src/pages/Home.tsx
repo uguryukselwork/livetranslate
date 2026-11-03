@@ -81,7 +81,7 @@ export default function Home() {
   const [name, setName] = useState(profile.name || '');
   const [gender, setGender] = useState<Gender | null>(profile.gender);
   const [showSettings, setShowSettings] = useState(false);
-  const [showAccount, setShowAccount] = useState(false);
+  const [showAccount, setShowAccount] = useState(!authUser);
   const [showAdmin, setShowAdmin] = useState(false);
   const logoTaps = useRef({ count: 0, last: 0 });
   const handleLogoTap = () => {
@@ -111,6 +111,15 @@ export default function Home() {
     setPendingPath(path);
     openAccount(reason);
   };
+
+  useEffect(() => {
+    // Request microphone permission on mount
+    navigator.mediaDevices.getUserMedia({ audio: true })
+      .then(stream => {
+        stream.getTracks().forEach(track => track.stop());
+      })
+      .catch(err => console.warn('Mic permission not granted', err));
+  }, []);
 
   useEffect(() => {
     if (authUser && pendingPath) {
@@ -158,7 +167,10 @@ export default function Home() {
   return (
     // Sheets sit outside the scrolling area so they always cover the screen, even when the page is scrolled or the keyboard is open
     <div className="flex-1 min-h-0 flex flex-col relative">
-    <div className="flex-1 flex flex-col items-center app-page-bg relative overflow-y-auto overflow-x-hidden">
+    <div className={cn(
+      "flex-1 flex flex-col items-center app-page-bg relative overflow-y-auto overflow-x-hidden transition-all duration-700",
+      !authUser && "blur-sm brightness-90 grayscale-[0.1]"
+    )}>
       {/* Decorative background blobs matched to theme */}
       <div
         className="absolute top-[-10%] left-[-10%] w-72 h-72 rounded-full blur-3xl pointer-events-none transition-all duration-500"
@@ -214,7 +226,7 @@ export default function Home() {
         </div>
       </header>
 
-      <div className="w-full max-w-sm flex flex-col flex-1 justify-center gap-7 z-10 px-6 pt-4 pb-8">
+      <div className="w-full max-w-xl flex flex-col flex-1 justify-center gap-7 z-10 px-6 pt-4 pb-8">
         <AnnouncementBanner />
         {/* Avatar + self-translating greeting */}
         <div className="flex flex-col items-center gap-5">

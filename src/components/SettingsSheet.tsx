@@ -298,8 +298,6 @@ export default function SettingsSheet({ open, onClose, room }: SettingsSheetProp
                     />
                   </SettingsGroup>
 
-                  <SecuritySettingsSection />
-
                   <SettingsGroup title="Gizlilik">
                     <SettingsRow
                       tone="amber"

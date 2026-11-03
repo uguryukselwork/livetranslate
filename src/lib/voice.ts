@@ -2,6 +2,7 @@
 // My microphone streams to Gemini Live Translate, which returns my speech translated into the partner's
 // language as audio (relayed to the partner) plus both transcripts (saved as a chat message per sentence).
 import type { Session } from '@google/genai';
+import { GoogleGenAI } from '@google/genai';
 import { getAudioContext } from './utils';
 
 const INPUT_RATE = 16000;
@@ -247,6 +248,8 @@ export class VoiceTranslator implements VoiceEngine {
       capture.port.onmessage = (e) => downsampler.push(e.data as Float32Array);
 
       this.relayTimer = setInterval(() => this.flushRelay(), RELAY_INTERVAL_MS);
+      // Wait for stream to be fully active
+      await new Promise(resolve => setTimeout(resolve, 500));
       await this.connect();
     } catch (err) {
       const message = err instanceof DOMException && err.name === 'NotAllowedError'
@@ -256,6 +259,8 @@ export class VoiceTranslator implements VoiceEngine {
       this.stop();
     }
   }
+
+  private opened = false;
 
   private async connect() {
     const res = await fetch('/api/live-token', {
@@ -280,13 +285,14 @@ export class VoiceTranslator implements VoiceEngine {
     }
     if (!this.active) return;
 
-    const { GoogleGenAI } = await loadGenAI();
-    const ai = new GoogleGenAI({ apiKey: data.token, httpOptions: { apiVersion: 'v1alpha' } });
+    this.opened = false;
+    const ai = new GoogleGenAI({ apiKey: data.token });
     this.session = await ai.live.connect({
       model: data.model,
       config: data.config,
       callbacks: {
         onopen: () => {
+          this.opened = true;
           this.retries = 0;
           this.opts.onState('live');
         },
@@ -320,10 +326,9 @@ export class VoiceTranslator implements VoiceEngine {
         onerror: (e) => console.warn('Live translate error', e),
         onclose: () => {
           this.session = null;
-          // Sessions end after ~10 minutes or on network drops; reconnect while the call is on
           if (!this.active) return;
           if (this.retries++ >= 3) {
-            this.opts.onState('error', 'Bağlantı koptu');
+            this.opts.onState('error', 'Sesli çeviri bağlantısı koptu');
             this.stop();
             return;
           }
@@ -333,7 +338,7 @@ export class VoiceTranslator implements VoiceEngine {
               this.opts.onState('error', err instanceof Error ? err.message : String(err));
               this.stop();
             });
-          }, 500 * this.retries);
+          }, 1000 * Math.max(1, this.retries));
         },
       },
     });
@@ -497,14 +502,18 @@ export class BrowserVoiceTranslator implements VoiceEngine {
       if (interim) this.opts.onCaption(interim);
     };
     rec.onerror = (e) => {
+      console.warn('Dictation error', e.error);
       if (e.error === 'not-allowed' || e.error === 'service-not-allowed') {
-        this.opts.onState('error', 'Mikrofon izni verilmedi');
+        this.opts.onState('error', 'Mikrofon iznine ihtiyaç var. Lütfen tarayıcı ayarlarından mikrofon iznini kontrol et.');
         this.stop();
       } else if (e.error === 'language-not-supported') {
-        this.opts.onState('error', 'Bu dil tarayıcıda tanınmıyor');
+        this.opts.onState('error', 'Seçilen dil bu tarayıcıda desteklenmiyor.');
         this.stop();
+      } else if (e.error === 'network') {
+        this.opts.onState('error', 'İnternet bağlantısı kesildi, tekrar deneniyor...');
+      } else if (e.error === 'no-speech') {
+        // Just let it restart
       }
-      // 'no-speech', 'aborted', 'network': onend restarts it
     };
     // Phones stop listening after a pause; keep it going for the whole call
     rec.onend = () => {
@@ -596,9 +605,11 @@ export class Dictation {
         if (!text) continue;
         if (e.results[i].isFinal) {
           handled.add(i);
-          // Android repeats a finished phrase; keep it once
-          if (!this.finalText.toLocaleLowerCase().endsWith(text.toLocaleLowerCase())) {
+          // Android/iOS sometimes repeat text; ensure we don't duplicate
+          if (!text.toLocaleLowerCase().includes(this.finalText.toLocaleLowerCase())) {
             this.finalText = (this.finalText ? this.finalText + ' ' : '') + text;
+          } else {
+            this.finalText = text;
           }
         } else {
           interim += (interim ? ' ' : '') + text;

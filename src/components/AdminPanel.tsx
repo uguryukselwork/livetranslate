@@ -229,9 +229,14 @@ export default function AdminPanel({ open, onClose }: { open: boolean; onClose: 
                 </p>
               </div>
               {overview && (
-                <button type="button" onClick={() => run('refresh', async () => true)} className={softIconButton} aria-label="Yenile" title="Yenile">
-                  <RefreshCw className={cn('w-5 h-5', busy === 'refresh' && 'animate-spin')} />
-                </button>
+                <div className="flex items-center gap-1">
+                  <button type="button" onClick={() => run('refresh', async () => true)} className={softIconButton} aria-label="Yenile" title="Yenile">
+                    <RefreshCw className={cn('w-5 h-5', busy === 'refresh' && 'animate-spin')} />
+                  </button>
+                  <button type="button" onClick={onClose} className={softIconButton} aria-label="Kapat" title="Kapat">
+                    <X className="w-5 h-5" />
+                  </button>
+                </div>
               )}
             </div>
 
@@ -266,8 +271,36 @@ export default function AdminPanel({ open, onClose }: { open: boolean; onClose: 
                 )}
 
                 {/* VIP access for everyone */}
-                <section className="space-y-2.5" role="radiogroup" aria-label="VIP kullanımı">
-                  <h3 className={sectionTitle}>VIP kullanımı · tüm kullanıcılar</h3>
+                <section className="space-y-3" role="radiogroup" aria-label="VIP kullanımı">
+                  <div className="flex items-center justify-between px-1">
+                    <h3 className={sectionTitle}>VIP kullanımı · tüm kullanıcılar</h3>
+                    <div className="flex items-center gap-2">
+                      <span className="text-[12px] font-bold text-(--theme-muted)">
+                        {overview.vip_access === 'everyone' ? 'Herkes VIP' : 'Sadece üyeler'}
+                      </span>
+                      <button
+                        type="button"
+                        role="switch"
+                        aria-checked={overview.vip_access === 'everyone'}
+                        disabled={!!busy}
+                        onClick={() => {
+                          const next: VipAccess = overview.vip_access === 'everyone' ? 'members' : 'everyone';
+                          if (next === 'everyone' && !draft.trim()) setDraft(FREE_ANNOUNCEMENT);
+                          void run(`access-${next}`, () => adminSetVipAccess(pin, next), 'Kaydedildi.');
+                        }}
+                        className={cn(
+                          'relative w-11 h-6 rounded-full shrink-0 transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-wait',
+                          overview.vip_access === 'everyone' ? 'bg-emerald-500' : 'bg-(--theme-border)'
+                        )}
+                      >
+                        <span className={cn(
+                          'absolute top-1 left-1 w-4 h-4 rounded-full bg-white shadow-sm transition-transform',
+                          overview.vip_access === 'everyone' && 'translate-x-5'
+                        )} />
+                      </button>
+                    </div>
+                  </div>
+                  
                   {ACCESS_OPTIONS.map(o => {
                     const selected = overview.vip_access === o.id;
                     return (
@@ -279,7 +312,6 @@ export default function AdminPanel({ open, onClose }: { open: boolean; onClose: 
                         disabled={!!busy}
                         onClick={() => {
                           if (selected) return;
-                          // Going free: suggest telling everyone (published only when "Yayınla" is tapped)
                           if (o.id === 'everyone' && !draft.trim()) setDraft(FREE_ANNOUNCEMENT);
                           void run(`access-${o.id}`, () => adminSetVipAccess(pin, o.id), 'Kaydedildi. Tüm kullanıcılarda yeni görüşmelerden itibaren geçerli.');
                         }}
@@ -349,88 +381,7 @@ export default function AdminPanel({ open, onClose }: { open: boolean; onClose: 
                   </form>
                 </section>
 
-                {/* Requests */}
-                <section className="space-y-2.5">
-                  <h3 className={sectionTitle}>Bekleyen istekler ({pending.length})</h3>
-                  {pending.length === 0 && (
-                    <p className="text-[13px] text-(--theme-muted) px-1">Bekleyen istek yok.</p>
-                  )}
-                  {pending.map(req => {
-                    const plan = describePlan(req.plan);
-                    return (
-                      <div key={req.id} className="rounded-3xl border-2 border-(--theme-border) bg-(--theme-card-bg) p-3.5 space-y-3">
-                        <div className="flex items-center gap-3">
-                          <span className={cn(
-                            'w-10 h-10 shrink-0 rounded-2xl flex items-center justify-center',
-                            req.kind === 'gift' ? 'bg-rose-500/15 text-rose-600' : 'bg-amber-500/15 text-amber-600'
-                          )}>
-                            {req.kind === 'gift' ? <Gift className="w-5 h-5" /> : <ShoppingBag className="w-5 h-5" />}
-                          </span>
-                          <div className="flex-1 min-w-0">
-                            <div className="font-bold text-[15px] text-(--theme-ink) truncate">{req.user_name}</div>
-                            <div className="text-[12.5px] text-(--theme-muted)">
-                              {req.kind === 'gift' ? 'Hediye / ücretsiz deneme isteği' : `${plan?.label ?? req.plan} · ${plan?.price ?? ''}`}
-                              {' · '}{formatDate(req.created_at)}
-                            </div>
-                          </div>
-                        </div>
-                        {req.kind === 'gift' && (
-                          <div className="flex gap-1 p-1 rounded-full bg-(--theme-subtle-bg)" role="radiogroup" aria-label="VIP süresi">
-                            {GIFT_DURATIONS.map(d => {
-                              const selected = (giftDays[req.id] ?? 30) === d.days;
-                              return (
-                                <button
-                                  key={d.days}
-                                  type="button"
-                                  role="radio"
-                                  aria-checked={selected}
-                                  onClick={() => setGiftDays(g => ({ ...g, [req.id]: d.days }))}
-                                  className={cn('flex-1 py-1.5 rounded-full text-[12.5px] font-bold cursor-pointer', selected ? 'bg-(--theme-card-bg) text-(--theme-accent) shadow-sm' : 'text-(--theme-muted)')}
-                                >
-                                  {d.label}
-                                </button>
-                              );
-                            })}
-                          </div>
-                        )}
-                        <div className="flex gap-2">
-                          <button
-                            type="button"
-                            disabled={!!busy}
-                            onClick={() => decide(req, true)}
-                            className="flex-1 py-2.5 rounded-2xl bg-emerald-600 text-white text-[14px] font-bold flex items-center justify-center gap-1.5 hover:bg-emerald-700 disabled:opacity-50 cursor-pointer"
-                          >
-                            {busy === `req-${req.id}` ? <Loader2 className="w-4 h-4 animate-spin" /> : <Crown className="w-4 h-4" />}
-                            VIP ata{req.kind === 'purchase' && plan ? ` (${plan.duration})` : ''}
-                          </button>
-                          <button
-                            type="button"
-                            disabled={!!busy}
-                            onClick={() => decide(req, false)}
-                            className="px-4 py-2.5 rounded-2xl bg-(--theme-subtle-bg) text-(--theme-ink) text-[14px] font-bold flex items-center gap-1.5 hover:bg-red-500/10 hover:text-red-600 disabled:opacity-50 cursor-pointer"
-                          >
-                            <X className="w-4 h-4" /> Reddet
-                          </button>
-                        </div>
-                      </div>
-                    );
-                  })}
-                  {decided.length > 0 && (
-                    <details className="px-1">
-                      <summary className="text-[13px] font-bold text-(--theme-muted) cursor-pointer">Son yanıtlanan istekler</summary>
-                      <ul className="mt-2 space-y-1">
-                        {decided.map(r => (
-                          <li key={r.id} className="text-[13px] text-(--theme-ink) flex justify-between gap-2">
-                            <span className="truncate">{r.user_name} · {r.kind === 'gift' ? 'Hediye' : describePlan(r.plan)?.label}</span>
-                            <span className={r.status === 'approved' ? 'text-emerald-700 font-bold' : 'text-(--theme-muted)'}>
-                              {r.status === 'approved' ? 'Onaylandı' : 'Reddedildi'}
-                            </span>
-                          </li>
-                        ))}
-                      </ul>
-                    </details>
-                  )}
-                </section>
+
 
                 {/* Users: send balance and usage time */}
                 <section className="space-y-2.5">
@@ -568,71 +519,7 @@ export default function AdminPanel({ open, onClose }: { open: boolean; onClose: 
                   </ul>
                 </section>
 
-                {/* VIP by room code */}
-                <section className="space-y-2.5">
-                  <h3 className={sectionTitle}>Oda koduyla VIP ver</h3>
-                  <form onSubmit={findRoom} className="rounded-3xl border-2 border-(--theme-border) bg-(--theme-card-bg) p-3.5 space-y-2.5">
-                    <p className="text-[12.5px] text-(--theme-muted) px-1">Kullanıcının oda kodunu gir, odadaki kişilerden VIP yapmak istediğini seç.</p>
-                    <div className="flex gap-2">
-                      <input
-                        type="text"
-                        value={roomCode}
-                        onChange={(e) => { setRoomCode(e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 6)); setRoomMembers(null); }}
-                        placeholder="ODA KODU"
-                        aria-label="Oda kodu"
-                        autoCapitalize="characters"
-                        autoComplete="off"
-                        className={cn(fieldClass, 'py-2.5 flex-1 min-w-0 font-display tracking-[0.2em]')}
-                      />
-                      <button type="submit" disabled={roomCode.length !== 6 || !!busy} className="px-4 rounded-2xl bg-(--theme-accent) text-(--theme-on-accent) text-[13.5px] font-bold flex items-center gap-1.5 disabled:opacity-50 cursor-pointer">
-                        {busy === 'room' ? <Loader2 className="w-4 h-4 animate-spin" /> : <KeyRound className="w-4 h-4" />}
-                        Bul
-                      </button>
-                    </div>
-                    <div className="flex gap-1 p-1 rounded-full bg-(--theme-subtle-bg)" role="radiogroup" aria-label="VIP süresi">
-                      {GIFT_DURATIONS.map(d => (
-                        <button
-                          key={d.days}
-                          type="button"
-                          role="radio"
-                          aria-checked={roomDays === d.days}
-                          onClick={() => setRoomDays(d.days)}
-                          className={cn('flex-1 py-1.5 rounded-full text-[12.5px] font-bold cursor-pointer', roomDays === d.days ? 'bg-(--theme-card-bg) text-(--theme-accent) shadow-sm' : 'text-(--theme-muted)')}
-                        >
-                          {d.label}
-                        </button>
-                      ))}
-                    </div>
-                    {roomMembers && roomMembers.length === 0 && (
-                      <p className="text-[13px] text-(--theme-muted) px-1">Bu odada kimse yok.</p>
-                    )}
-                    {roomMembers && roomMembers.length > 0 && (
-                      <ul className="space-y-2">
-                        {roomMembers.map(m => (
-                          <li key={m.user_id} className="flex items-center gap-3 rounded-2xl bg-(--theme-subtle-bg) pl-3 pr-1.5 py-1.5">
-                            <span className="flex-1 min-w-0">
-                              <span className="block font-bold text-[14px] text-(--theme-ink) truncate">
-                                {m.name} <span className="font-normal text-[11.5px] text-(--theme-muted)">#{m.user_id.slice(0, 6)}</span>
-                              </span>
-                              <span className="block text-[12px] text-(--theme-muted)">
-                                {m.vip_until ? `VIP · ${formatDate(m.vip_until)} kadar` : 'Ücretsiz'}
-                              </span>
-                            </span>
-                            <button
-                              type="button"
-                              disabled={!!busy}
-                              onClick={() => void giveVip(m)}
-                              className="px-3 py-2 rounded-xl bg-amber-500 text-white text-[13px] font-bold flex items-center gap-1.5 hover:bg-amber-600 disabled:opacity-50 cursor-pointer"
-                            >
-                              {busy === `vip-${m.user_id}` ? <Loader2 className="w-4 h-4 animate-spin" /> : <Crown className="w-4 h-4" />}
-                              {m.vip_until ? 'Uzat' : 'VIP yap'}
-                            </button>
-                          </li>
-                        ))}
-                      </ul>
-                    )}
-                  </form>
-                </section>
+
               </div>
             )}
           </motion.div>

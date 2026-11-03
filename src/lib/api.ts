@@ -105,15 +105,16 @@ export interface VipStatus {
   vipSeconds: number;
 }
 
-export async function fetchVipStatus(_userId: string): Promise<VipStatus> {
-  // Everyone is VIP in the local test environment
-  return {
-    access: 'everyone',
-    vipUntil: new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString(),
-    canUseVip: true,
-    balanceUsd: 100,
-    vipSeconds: 36000,
+export async function fetchVipStatus(userId: string): Promise<VipStatus> {
+  const res = await fetch(`/api/vip-status/${userId}`);
+  if (!res.ok) return {
+    access: 'off',
+    vipUntil: null,
+    canUseVip: false,
+    balanceUsd: 0,
+    vipSeconds: 0,
   };
+  return res.json();
 }
 
 export function subscribeToMembership(_userId: string, _onChange: () => void): () => void {
@@ -121,7 +122,10 @@ export function subscribeToMembership(_userId: string, _onChange: () => void): (
 }
 
 export async function fetchAnnouncement(): Promise<string> {
-  return '';
+  const res = await fetch('/api/announcement');
+  if (!res.ok) return '';
+  const data = await res.json();
+  return data.text || '';
 }
 
 export async function markMessagesRead(roomId: string, userId: string) {
@@ -209,21 +213,30 @@ export interface RoomMember {
   vip_until: string | null;
 }
 
-export async function adminCheckPin(_pin: string): Promise<boolean> {
-  return true;
+export async function adminCheckPin(pin: string): Promise<boolean> {
+  const res = await fetch('/api/admin/check-pin', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ pin })
+  });
+  if (!res.ok) return false;
+  const data = await res.json();
+  return !!data.valid;
 }
 
 export async function adminOverview(_pin: string): Promise<AdminOverview | null> {
-  return {
-    vip_access: 'everyone',
-    vip_members: 0,
-    requests: [],
-    users: []
-  };
+  const res = await fetch('/api/admin/overview');
+  if (!res.ok) return null;
+  return res.json();
 }
 
-export async function adminSetVipAccess(_pin: string, _value: VipAccess): Promise<boolean> {
-  return true;
+export async function adminSetVipAccess(_pin: string, value: VipAccess): Promise<boolean> {
+  const res = await fetch('/api/admin/vip-access', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ mode: value })
+  });
+  return res.ok;
 }
 
 export async function adminDecideRequest(_pin: string, _id: string, _approve: boolean, _days: number | null): Promise<boolean> {
@@ -242,8 +255,13 @@ export async function adminRoomMembers(_pin: string, _code: string): Promise<Roo
   return [];
 }
 
-export async function adminSetAnnouncement(_pin: string, _text: string): Promise<boolean> {
-  return true;
+export async function adminSetAnnouncement(_pin: string, text: string): Promise<boolean> {
+  const res = await fetch('/api/admin/announcement', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ text })
+  });
+  return res.ok;
 }
 
 export async function adminGrantVip(_pin: string, _userId: string, _days: number): Promise<boolean> {

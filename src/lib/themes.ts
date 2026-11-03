@@ -105,10 +105,9 @@ export const CHAT_PATTERNS: { id: ChatPatternId; name: string; icon: string }[] 
   { id: 'waves', name: 'Dalgalar', icon: '〰️' },
 ];
 
-// Default look per gender: Gece Okyanusu for men, Gül Kurusu for women, Klasik İndigo otherwise
+// Default look per gender: 'midnight' for male, 'indigo' for female/others
 export function themeForGender(gender: 'male' | 'female' | null | undefined): ColorThemeId {
   if (gender === 'male') return 'midnight';
-  if (gender === 'female') return 'blush';
   return 'indigo';
 }
 

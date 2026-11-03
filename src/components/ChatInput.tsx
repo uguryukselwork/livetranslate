@@ -3,14 +3,14 @@ import { Send, Zap, Plus, X, Pencil, Trash2, Check, Reply, Mic, Square } from 'l
 import { cn } from '../lib/utils';
 import { useStore } from '../store/useStore';
 import { t, getDefaultQuickMessages } from '../lib/i18n';
-import { Dictation } from '../lib/voice';
+import { Dictation, isDictationSupported } from '../lib/voice';
 
 /** Tell the partner "yazıyor…" at most this often while typing */
 const TYPING_PING_MS = 2500;
 /** Stop showing "yazıyor…" after this much inactivity */
 const TYPING_IDLE_MS = 3500;
 /** Voice typing: once I'm quiet this long, what I said is sent */
-const DICTATION_SEND_MS = 1800;
+const DICTATION_SEND_MS = 3000;
 
 interface ChatInputProps {
   onSend: (text: string) => void;
@@ -257,6 +257,18 @@ export default function ChatInput({ onSend, disabled, replyTo, onCancelReply, on
           >
             <Zap className="w-5 h-5" />
           </button>
+          
+          {isDictationSupported() && !dictating && !micBusy && (
+            <button
+              type="button"
+              title="Sesli yazma"
+              aria-label="Sesli yazma"
+              onClick={startDictation}
+              className="w-9 h-9 rounded-full flex items-center justify-center text-(--theme-muted) hover:text-(--theme-accent) hover:bg-(--theme-accent-light) transition-colors"
+            >
+              <Mic className="w-4 h-4" />
+            </button>
+          )}
           
           {/* Quick Messages Popover */}
           {showQuickMessages && (

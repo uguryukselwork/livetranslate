@@ -127,6 +127,15 @@ html:not([data-color-theme]) {
   --theme-blob-1: rgba(236, 72, 153, 0.15);
   --theme-blob-2: rgba(99, 102, 241, 0.15);
 }
+
+/* Lilac shift for female gender on Indigo theme */
+html[data-color-theme="indigo"][data-gender="female"],
+html:not([data-color-theme])[data-gender="female"] {
+  --theme-accent: #a78bfa; 
+  --theme-accent-hover: #8b5cf6;
+  --theme-accent-light: #f5f3ff;
+  --theme-blob-1: rgba(167, 139, 250, 0.22);
+}
 html.dark[data-color-theme="indigo"],
 .dark html[data-color-theme="indigo"],
 html.dark:not([data-color-theme]) {
@@ -141,6 +150,15 @@ html.dark:not([data-color-theme]) {
   --theme-accent-light: rgba(99, 102, 241, 0.15);
   --theme-blob-1: rgba(236, 72, 153, 0.12);
   --theme-blob-2: rgba(99, 102, 241, 0.15);
+}
+
+/* Dark lilac shift for female gender */
+html.dark[data-color-theme="indigo"][data-gender="female"],
+html.dark:not([data-color-theme])[data-gender="female"] {
+  --theme-accent: #c084fc;
+  --theme-accent-hover: #d8b4fe;
+  --theme-accent-light: rgba(192, 132, 252, 0.15);
+  --theme-blob-1: rgba(168, 85, 247, 0.12);
 }
 
 /* 2. Emerald (Zümrüt Doğa) */

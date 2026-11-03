@@ -1,8 +1,9 @@
-import { ArrowLeft, Settings, Copy, CheckCircle2, Share2, Users, EyeOff, AudioLines } from 'lucide-react';
+import { ArrowLeft, Settings, Copy, CheckCircle2, Share2, Users, EyeOff, AudioLines, DoorOpen, X } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useState } from 'react';
 import { useStore } from '../store/useStore';
 import { t } from '../lib/i18n';
+import { cn } from '../lib/utils';
 
 interface RoomHeaderProps {
   roomCode: string;
@@ -108,11 +109,17 @@ export default function RoomHeader({ roomCode, partnerName, partnerGender, partn
 
       {/* Main Top Navigation Bar */}
       <div className="app-header-bg border-b px-2 py-2.5 flex items-center justify-between gap-1 transition-colors relative z-20">
-        {/* Left side: Back button & Partner Info */}
+        {/* Left side: Odalarım button & Partner Info */}
         <div className="flex flex-1 items-center gap-1.5 min-w-0">
-          <button onClick={() => navigate('/')} className={iconButton} aria-label="Ana sayfa">
-            <ArrowLeft className="w-5 h-5" />
-          </button>
+          {onOpenParticipants ? (
+            <button onClick={onOpenParticipants} className={cn(iconButton, 'bg-(--theme-accent-light) text-(--theme-accent) hover:bg-(--theme-accent) hover:text-(--theme-on-accent)')} aria-label="Odalarım" title="Odalarım">
+              <DoorOpen className="w-5 h-5" />
+            </button>
+          ) : (
+            <button onClick={() => navigate('/')} className={iconButton} aria-label="Ana sayfa">
+              <ArrowLeft className="w-5 h-5" />
+            </button>
+          )}
 
           <div className="flex items-center gap-2.5 min-w-0">
             <div className="relative shrink-0">
@@ -147,8 +154,8 @@ export default function RoomHeader({ roomCode, partnerName, partnerGender, partn
           </div>
         </div>
 
-        {/* Right side: Incognito, Rooms, Share, Settings */}
-        <div className="flex items-center shrink-0">
+        {/* Right side: Incognito, Voice Call, Share, Settings, Exit (X) */}
+        <div className="flex items-center shrink-0 gap-0.5">
           {hideProfile && (
             <button
               onClick={onOpenSettings}
@@ -165,18 +172,12 @@ export default function RoomHeader({ roomCode, partnerName, partnerGender, partn
               onClick={onStartCall}
               disabled={inCall}
               className={inCall
-                ? 'w-10 h-10 mr-0.5 rounded-full flex items-center justify-center bg-(--theme-accent) text-(--theme-on-accent)'
-                : 'w-10 h-10 mr-0.5 rounded-full flex items-center justify-center bg-(--theme-accent-light) text-(--theme-accent) hover:bg-(--theme-accent) hover:text-(--theme-on-accent) transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-(--theme-accent)'}
+                ? 'w-10 h-10 rounded-full flex items-center justify-center bg-(--theme-accent) text-(--theme-on-accent)'
+                : 'w-10 h-10 rounded-full flex items-center justify-center bg-(--theme-accent-light) text-(--theme-accent) hover:bg-(--theme-accent) hover:text-(--theme-on-accent) transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-(--theme-accent)'}
               aria-label={t('call.start', profile.language)}
               title={t('call.start', profile.language)}
             >
               <AudioLines className="w-5 h-5" />
-            </button>
-          )}
-
-          {onOpenParticipants && (
-            <button onClick={onOpenParticipants} className={iconButton} aria-label="Odalarım" title="Odalarım">
-              <Users className="w-5 h-5" />
             </button>
           )}
 
@@ -196,6 +197,15 @@ export default function RoomHeader({ roomCode, partnerName, partnerGender, partn
             title={t('room.settings', profile.language)}
           >
             <Settings className="w-5 h-5" />
+          </button>
+
+          <button
+            onClick={() => navigate('/')}
+            className={cn(iconButton, 'hover:bg-red-500/10 hover:text-red-600 text-(--theme-muted)')}
+            aria-label="Odayı terk et"
+            title="Odayı terk et"
+          >
+            <X className="w-5 h-5" />
           </button>
         </div>
       </div>

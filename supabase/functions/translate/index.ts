@@ -18,8 +18,7 @@ const LANGUAGE_NAMES: Record<string, string> = {
 };
 const languageName = (code: string) => LANGUAGE_NAMES[code] || code;
 
-// Tried in order; the second one takes over when the first is overloaded
-const GEMINI_MODELS = ["gemini-3.8-flash", "gemini-1.5-flash", "gemini-3.1-pro-preview"];
+const GEMINI_MODELS = ["gemini-1.5-flash", "gemini-2.5-flash", "gemini-1.5-pro", "gemini-3.8-flash"];
 
 async function translateWithGemini(text: string, target: string, source?: string): Promise<string | null> {
   const apiKey = Deno.env.get("GEMINI_API_KEY");

@@ -87,64 +87,6 @@ export default function ThemeSettingsSection() {
         </div>
       </SettingsGroup>
 
-      <SettingsGroup title="Kendi mesaj balonun">
-        <div className="grid grid-cols-4 gap-x-2 gap-y-4 p-4">
-          {BUBBLE_COLORS.map((bubble) => {
-            const isSelected = bubbleColor === bubble.id;
-            return (
-              <button
-                key={bubble.id}
-                type="button"
-                aria-pressed={isSelected}
-                onClick={() => setBubbleColor(bubble.id as BubbleColorId)}
-                className={cn('flex flex-col items-center gap-1.5 cursor-pointer rounded-2xl', focusRing)}
-              >
-                <span
-                  className={cn(
-                    'w-10 h-10 rounded-full flex items-center justify-center ring-offset-2 ring-offset-(--theme-card-bg) transition-shadow',
-                    isSelected ? 'ring-2 ring-(--theme-accent)' : ''
-                  )}
-                  style={{ background: bubble.id === 'theme' ? 'var(--theme-accent)' : bubble.color }}
-                >
-                  {isSelected && <Check className="w-4 h-4 text-white" strokeWidth={3} />}
-                </span>
-                <span className={cn('text-[11px] font-bold leading-tight text-center', isSelected ? 'text-(--theme-accent)' : 'text-(--theme-muted)')}>
-                  {bubble.name}
-                </span>
-              </button>
-            );
-          })}
-        </div>
-      </SettingsGroup>
-
-      <SettingsGroup title="Sohbet arka planı">
-        <div className="grid grid-cols-5 gap-2 p-3">
-          {CHAT_PATTERNS.map((pattern) => {
-            const isSelected = chatPattern === pattern.id;
-            return (
-              <button
-                key={pattern.id}
-                type="button"
-                aria-pressed={isSelected}
-                onClick={() => setChatPattern(pattern.id as ChatPatternId)}
-                className={cn('flex flex-col items-center gap-1.5 cursor-pointer rounded-2xl', focusRing)}
-              >
-                <span
-                  className={cn(
-                    'w-full aspect-square rounded-2xl app-page-bg border-2 transition-colors',
-                    isSelected ? 'border-(--theme-accent)' : 'border-(--theme-border)'
-                  )}
-                  style={getChatPatternStyle(pattern.id, isDark)}
-                />
-                <span className={cn('text-[11px] font-bold truncate max-w-full', isSelected ? 'text-(--theme-accent)' : 'text-(--theme-muted)')}>
-                  {pattern.name}
-                </span>
-              </button>
-            );
-          })}
-        </div>
-      </SettingsGroup>
-
       <button
         type="button"
         onClick={handleReset}

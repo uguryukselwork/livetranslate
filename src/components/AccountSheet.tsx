@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { ArrowLeft, Download, Loader2, LogOut, Settings as SettingsIcon, UserRound } from 'lucide-react';
+import { ArrowLeft, ChevronRight, Download, Loader2, LogOut, Settings as SettingsIcon, UserRound, X } from 'lucide-react';
 import { useStore } from '../store/useStore';
 import { signInWithGoogle, signInAsGuest, signOut, isGuest, isGoogleSignInEnabled } from '../lib/auth';
 import { SettingsGroup, SettingsRow, primaryButton, focusRing, softIconButton } from './ui';
@@ -53,18 +53,27 @@ export function SignInOptions({ onSignedIn }: { onSignedIn?: () => void }) {
   };
 
   return (
-    <div className="space-y-3">
-      <button type="button" onClick={() => run('guest')} disabled={!!busy} className={primaryButton}>
-        {busy === 'guest' ? <Loader2 className="w-[18px] h-[18px] animate-spin" /> : <UserRound className="w-[18px] h-[18px]" />}
+    <div className="space-y-4">
+      <button
+        type="button"
+        onClick={() => run('guest')}
+        disabled={!!busy}
+        className={cn(
+          'w-full py-4 px-6 rounded-full bg-[#078CCB] text-white font-bold text-[15px] flex items-center justify-center gap-3 hover:bg-[#067bb3] transition-all active:scale-[0.98] disabled:opacity-60 cursor-pointer shadow-sm',
+          focusRing
+        )}
+      >
+        {busy === 'guest' ? <Loader2 className="w-5 h-5 animate-spin" /> : <UserRound className="w-5 h-5" />}
         Misafir olarak devam et
       </button>
+
       <button
         type="button"
         onClick={() => run('google')}
         disabled={!!busy}
         aria-describedby={googleReady ? undefined : 'google-soon'}
         className={cn(
-          'w-full py-4 px-5 rounded-[1.75rem] bg-white text-[#1f1f1f] border-2 border-(--theme-border) font-bold text-[15px] flex items-center justify-center gap-3 hover:bg-neutral-50 transition-colors active:scale-[0.98] disabled:opacity-60 cursor-pointer',
+          'w-full py-4 px-6 rounded-full bg-white text-(--theme-ink) border-2 border-[#B9E6FF] font-bold text-[15px] flex items-center justify-center gap-3 hover:bg-[#f8fbff] transition-all active:scale-[0.98] disabled:opacity-60 cursor-pointer shadow-sm',
           !googleReady && 'opacity-70',
           focusRing
         )}
@@ -72,14 +81,16 @@ export function SignInOptions({ onSignedIn }: { onSignedIn?: () => void }) {
         {busy === 'google' ? <Loader2 className="w-5 h-5 animate-spin" /> : <GoogleLogo />}
         Google ile giriş yap
         {!googleReady && (
-          <span id="google-soon" className="rounded-full bg-neutral-100 px-2.5 py-0.5 text-[11px] font-bold uppercase tracking-wide text-neutral-500">
-            Yakında
+          <span id="google-soon" className="rounded-full bg-neutral-100 px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wider text-neutral-500 border border-neutral-200">
+            YAKINDA
           </span>
         )}
       </button>
+
       {notice && <p role="status" className="text-sm font-bold text-center text-(--theme-ink)">{notice}</p>}
       {error && <p role="alert" className="text-sm font-bold text-center text-red-600 dark:text-red-400">{error}</p>}
-      <p className="text-[13px] leading-snug text-center text-(--theme-muted) px-2">
+      
+      <p className="text-[13px] leading-snug text-center text-(--theme-muted) px-2 pt-1 opacity-80">
         Misafir hesabı sadece bu cihazda durur. Tarayıcı verilerini silersen odalarına tekrar erişemezsin.
       </p>
     </div>
@@ -99,6 +110,36 @@ export default function AccountSheet({ open, onClose, onOpenSettings, reason }: 
   const profile = useStore((s) => s.profile);
   const [signingOut, setSigningOut] = useState(false);
   const [view, setView] = useState<'main' | 'install'>('main');
+
+  const [busy, setBusy] = useState<'google' | 'guest' | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
+  const [googleReady, setGoogleReady] = useState(false);
+  useEffect(() => { isGoogleSignInEnabled().then(setGoogleReady); }, []);
+
+  const run = async (kind: 'google' | 'guest') => {
+    setError(null);
+    setNotice(null);
+    if (kind === 'google' && !googleReady) {
+      setNotice('Google ile giriş yakında geliyor. Şimdilik misafir olarak devam edebilirsin.');
+      return;
+    }
+    setBusy(kind);
+    try {
+      if (kind === 'google') {
+        await signInWithGoogle();
+      } else {
+        await signInAsGuest();
+        setBusy(null);
+      }
+    } catch (err: any) {
+      console.error('Sign-in failed', err);
+      setError(kind === 'google'
+        ? 'Google ile giriş şu an yapılamıyor. Biraz sonra tekrar dene.'
+        : 'Misafir girişi şu an yapılamıyor. Biraz sonra tekrar dene.');
+      setBusy(null);
+    }
+  };
 
   const close = () => { onClose(); setView('main'); };
   // Already running from the home screen: nothing to install
@@ -124,21 +165,30 @@ export default function AccountSheet({ open, onClose, onOpenSettings, reason }: 
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}
-          onClick={close}
-          className="absolute inset-0 z-50 flex items-end bg-black/40 backdrop-blur-[2px]"
+          onClick={() => { if (authUser) close(); }}
+          className={cn(
+            "absolute inset-0 z-50 flex items-end bg-black/40",
+            !authUser && "backdrop-blur-md"
+          )}
         >
           <motion.div
             initial={{ y: '100%' }}
             animate={{ y: 0 }}
             exit={{ y: '100%' }}
-            transition={{ type: 'spring', damping: 28, stiffness: 260 }}
+            transition={{ type: 'spring', damping: 30, stiffness: 300 }}
             onClick={(e) => e.stopPropagation()}
             role="dialog"
             aria-modal="true"
             aria-label={view === 'install' ? 'Uygulamayı indir' : authUser ? 'Hesabın' : 'Giriş yap'}
-            className="w-full app-page-bg rounded-t-[2rem] border-t border-(--theme-border) px-5 pt-3 pb-8 max-h-[90%] overflow-y-auto"
+            className="w-full bg-[#F0F9FF] rounded-t-[2.5rem] border-t border-(--theme-border) px-5 pt-3 pb-10 max-h-[95%] overflow-y-auto shadow-2xl relative"
           >
-            <div className="mx-auto mb-5 h-1.5 w-10 rounded-full bg-(--theme-border)" aria-hidden />
+            {/* Handle / Tutamaç */}
+            <div className="absolute top-3 right-4 z-10">
+              <button type="button" onClick={close} className={softIconButton} aria-label="Kapat" title="Kapat">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            <div className="mx-auto mb-6 h-1.5 w-12 rounded-full bg-[#B9E6FF]" aria-hidden />
 
             {view === 'install' ? (
               <div className="space-y-5">
@@ -168,12 +218,6 @@ export default function AccountSheet({ open, onClose, onOpenSettings, reason }: 
                   </div>
                 </div>
 
-                {guest && (
-                  <p className="rounded-3xl bg-(--theme-accent-light) px-4 py-3.5 text-sm text-(--theme-ink)">
-                    Misafir hesabın sadece bu cihazda duruyor. Odalarını başka cihazlarda da görmek istersen Google ile giriş yap. Misafir hesaptaki odalar yeni hesaba taşınmaz.
-                  </p>
-                )}
-
                 <SettingsGroup>
                   <SettingsRow
                     tone="slate"
@@ -200,23 +244,56 @@ export default function AccountSheet({ open, onClose, onOpenSettings, reason }: 
               </div>
             ) : (
               <div className="space-y-6">
-                <div className="text-center space-y-1.5 px-2">
-                  <h2 className="font-display font-semibold text-2xl text-(--theme-ink)">Giriş yap</h2>
-                  <p className="text-[15px] text-(--theme-muted)">
+                <div className="text-center space-y-1 px-2">
+                  <h2 className="font-display font-semibold text-[26px] text-[#101828]">Giriş yap</h2>
+                  <p className="text-[15px] font-medium text-[#64748B]">
                     {reason || 'Oda kurmak ve sohbet etmek için giriş yap.'}
                   </p>
                 </div>
-                <SignInOptions onSignedIn={close} />
-                <SettingsGroup>
-                  {installRow}
-                  <SettingsRow
-                    tone="slate"
-                    icon={<SettingsIcon className="w-[18px] h-[18px]" />}
-                    title="Ayarlar"
-                    onClick={() => { close(); onOpenSettings(); }}
-                    chevron
-                  />
-                </SettingsGroup>
+                
+                <div className="space-y-3 px-1">
+                  <button
+                    type="button"
+                    onClick={() => run('guest')}
+                    className="w-full py-[1.125rem] px-6 rounded-full bg-[#078CCB] text-white font-bold text-[16px] flex items-center justify-center gap-3 hover:bg-[#067bb3] transition-all active:scale-[0.98] shadow-md shadow-blue-500/20"
+                  >
+                    <UserRound className="w-5 h-5" />
+                    Misafir olarak devam et
+                  </button>
+
+                  <button
+                    type="button"
+                    disabled
+                    className="w-full py-[1.125rem] px-6 rounded-full bg-white text-[#101828] border-2 border-[#B9E6FF] font-bold text-[16px] flex items-center justify-center gap-3 opacity-80"
+                  >
+                    <GoogleLogo />
+                    Google ile giriş yap
+                    <span className="ml-1 rounded-full bg-[#F0F9FF] border border-[#B9E6FF] px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-[#078CCB]">
+                      YAKINDA
+                    </span>
+                  </button>
+                </div>
+
+                <div className="pt-2">
+                  <div className="bg-white rounded-[2rem] border-2 border-[#B9E6FF] overflow-hidden divide-y divide-[#B9E6FF]/40 shadow-sm">
+                    {!isInstalledApp() && (
+                      <button
+                        type="button"
+                        onClick={() => setView('install')}
+                        className="w-full flex items-center gap-3.5 px-5 py-4 hover:bg-neutral-50 transition-colors text-left"
+                      >
+                        <div className="w-10 h-10 rounded-2xl bg-[#F0F9FF] text-[#078CCB] flex items-center justify-center shrink-0">
+                          <Download className="w-5 h-5" />
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <p className="text-[15px] font-bold text-[#101828]">Uygulamayı indir</p>
+                          <p className="text-[13px] text-[#64748B]">Ana ekrana ekle, iPhone ve Android rehberi</p>
+                        </div>
+                        <ChevronRight className="w-5 h-5 text-[#64748B] shrink-0" />
+                      </button>
+                    )}
+                  </div>
+                </div>
               </div>
             )}
           </motion.div>
