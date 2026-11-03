@@ -33,6 +33,17 @@
       }
     </style>
     <script>
+      // Suppress Vite HMR WebSocket connection errors in preview environment
+      window.addEventListener('unhandledrejection', function(e) {
+        if (e.reason && (e.reason.message?.includes('WebSocket') || String(e.reason).includes('WebSocket') || e.reason.stack?.includes('@vite/client'))) {
+          e.preventDefault();
+        }
+      });
+      window.addEventListener('error', function(e) {
+        if (e.message && (e.message.includes('WebSocket') || e.filename?.includes('@vite/client'))) {
+          e.preventDefault();
+        }
+      });
       try {
         const stored = localStorage.getItem('livetranslate-storage');
         const parsed = stored ? JSON.parse(stored) : null;

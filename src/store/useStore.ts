@@ -64,6 +64,12 @@ interface AppState {
   setHideProfile: (hide: boolean) => void;
   vibrationEnabled: boolean;
   setVibrationEnabled: (enabled: boolean) => void;
+  ttsVoiceGender: 'female' | 'male';
+  setTtsVoiceGender: (gender: 'female' | 'male') => void;
+  ttsVoiceSpeed: number;
+  setTtsVoiceSpeed: (speed: number) => void;
+  sendVoiceMessage: boolean;
+  setSendVoiceMessage: (enabled: boolean) => void;
   // Security PIN & Biometrics
   appPin: string | null;
   setAppPin: (pin: string | null) => void;
@@ -149,6 +155,12 @@ export const useStore = create<AppState>()(
       setHideProfile: (hideProfile) => set({ hideProfile }),
       vibrationEnabled: true,
       setVibrationEnabled: (vibrationEnabled) => set({ vibrationEnabled }),
+      ttsVoiceGender: 'female',
+      setTtsVoiceGender: (ttsVoiceGender) => set({ ttsVoiceGender }),
+      ttsVoiceSpeed: 1.0,
+      setTtsVoiceSpeed: (ttsVoiceSpeed) => set({ ttsVoiceSpeed }),
+      sendVoiceMessage: false,
+      setSendVoiceMessage: (sendVoiceMessage) => set({ sendVoiceMessage }),
       // Security
       appPin: null,
       setAppPin: (appPin) => set({ appPin }),
@@ -251,6 +263,9 @@ export const useStore = create<AppState>()(
         isPremium: state.isPremium,
         hideProfile: state.hideProfile,
         vibrationEnabled: state.vibrationEnabled,
+        ttsVoiceGender: state.ttsVoiceGender,
+        ttsVoiceSpeed: state.ttsVoiceSpeed,
+        sendVoiceMessage: state.sendVoiceMessage,
         appPin: state.appPin,
         isAppLockEnabled: state.isAppLockEnabled,
         isRoomLockEnabled: state.isRoomLockEnabled,

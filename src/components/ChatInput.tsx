@@ -3,7 +3,7 @@ import { Send, Zap, Plus, X, Pencil, Trash2, Check, Reply, Mic, Square } from 'l
 import { cn } from '../lib/utils';
 import { useStore } from '../store/useStore';
 import { t, getDefaultQuickMessages } from '../lib/i18n';
-import { Dictation, isDictationSupported } from '../lib/voice';
+import { Dictation, isDictationSupported, speak } from '../lib/voice';
 
 /** Tell the partner "yazıyor…" at most this often while typing */
 const TYPING_PING_MS = 2500;
@@ -21,6 +21,7 @@ interface ChatInputProps {
   onTyping?: (typing: boolean) => void;
   /** The microphone is taken by a voice call: no voice typing meanwhile */
   micBusy?: boolean;
+  sendVoice?: boolean;
   ref?: React.Ref<ChatInputHandle>;
 }
 
@@ -29,7 +30,7 @@ export interface ChatInputHandle {
   startDictation: () => void;
 }
 
-export default function ChatInput({ onSend, disabled, replyTo, onCancelReply, onTyping, micBusy, ref }: ChatInputProps) {
+export default function ChatInput({ onSend, disabled, replyTo, onCancelReply, onTyping, micBusy, sendVoice, ref }: ChatInputProps) {
   const { profile, quickMessages: savedQuickMessages, addQuickMessage, removeQuickMessage, updateQuickMessage } = useStore();
   const quickMessages = savedQuickMessages ?? getDefaultQuickMessages(profile.language);
   const lang = profile.language;
@@ -169,6 +170,7 @@ export default function ChatInput({ onSend, disabled, replyTo, onCancelReply, on
     e.preventDefault();
     if (text.trim() && !disabled) {
       onSend(text.trim());
+      if (sendVoice) void speak(text.trim(), lang);
       clearAfterSend();
     }
   };

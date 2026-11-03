@@ -143,9 +143,8 @@ async function startServer() {
     }
 
     if (ai && Date.now() > geminiDisabledUntil) {
-      for (const model of ['gemini-1.5-flash', 'gemini-2.5-flash', 'gemini-1.5-pro', 'gemini-3.8-flash']) {
+      for (const model of ['gemini-3.8-flash']) {
         try {
-          console.log(`[Translate] Trying Engine 2 (Gemini ${model})...`);
           const prompt = `You are a professional translator. 
 Translate the following text into ${getLanguageName(target)}.
 ${source ? `The source language is ${getLanguageName(source)}.` : 'Automatically detect the source language.'}
@@ -169,11 +168,9 @@ Text to translate:
           }
         } catch (err: any) {
           const msg = err?.message || '';
-          console.log(`[Translate] Engine 2 notice (${model}):`, msg);
-          if (msg.includes('RESOURCE_EXHAUSTED') || msg.includes('spending cap') || msg.includes('PERMISSION_DENIED')) {
-            const isDailyLimit = msg.includes('per day limit exceeded');
-            // If it is a daily limit, wait 6 hours before trying again
-            geminiDisabledUntil = Date.now() + (isDailyLimit ? 360 : 10) * 60 * 1000;
+          if (msg.includes('429') || msg.includes('RESOURCE_EXHAUSTED') || msg.includes('quota') || msg.includes('404')) {
+            // Disable Gemini for 6 hours on quota / not found error so Engine 1 operates seamlessly
+            geminiDisabledUntil = Date.now() + 6 * 60 * 60 * 1000;
             break;
           }
         }
@@ -400,6 +397,81 @@ Text to translate:
         }
       }
     });
+  });
+
+  let elevenLabsDisabled = false;
+
+  // ElevenLabs & High Quality Neural Voice API
+  app.post('/api/tts', async (req, res) => {
+    try {
+      const { text, lang, voiceGender } = req.body;
+      if (!text || typeof text !== 'string') {
+        return res.status(400).json({ error: 'Text is required' });
+      }
+
+      const cleanText = text.slice(0, 450).trim();
+      const languageCode = lang || 'tr';
+      const elevenKey = process.env.ELEVENLABS_API_KEY || 'sk_e5fd5f61fce207d7f558e0f0b8df0631870b13e4901a85bc';
+
+      // 1. Primary: Try ElevenLabs TTS API
+      if (elevenKey && !elevenLabsDisabled) {
+        try {
+          // Rachel (Female) vs Adam (Male)
+          const voiceId = voiceGender === 'male' ? 'pNInz6obpgDQGcFmaJgB' : '21m00Tcm4TlvDq8ikWAM'; 
+          const elRes = await fetch(`https://api.elevenlabs.io/v1/text-to-speech/${voiceId}`, {
+            method: 'POST',
+            headers: {
+              'xi-api-key': elevenKey,
+              'Content-Type': 'application/json',
+              'Accept': 'audio/mpeg',
+            },
+            body: JSON.stringify({
+              text: cleanText,
+              model_id: 'eleven_multilingual_v2',
+              voice_settings: {
+                stability: 0.5,
+                similarity_boost: 0.75,
+              },
+            }),
+            signal: AbortSignal.timeout(8000),
+          });
+
+          if (elRes.ok) {
+            const audioBuffer = await elRes.arrayBuffer();
+            if (audioBuffer.byteLength > 200) {
+              res.setHeader('Content-Type', 'audio/mpeg');
+              return res.send(Buffer.from(audioBuffer));
+            }
+          } else {
+            const errText = await elRes.text().catch(() => '');
+            if (elRes.status === 401 || elRes.status === 400 || errText.includes('invalid_api_key')) {
+              elevenLabsDisabled = true;
+            }
+          }
+        } catch (e) {
+          // Fallback
+        }
+      }
+
+      // 2. High-quality free neural voice fallback
+      const googleTtsUrl = `https://translate.google.com/translate_tts?ie=UTF-8&q=${encodeURIComponent(cleanText)}&tl=${encodeURIComponent(languageCode)}&client=tw-ob`;
+      const ttsRes = await fetch(googleTtsUrl, {
+        headers: {
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+        },
+      });
+
+      if (ttsRes.ok) {
+        const audioBuffer = await ttsRes.arrayBuffer();
+        res.setHeader('Content-Type', 'audio/mpeg');
+        return res.send(Buffer.from(audioBuffer));
+      }
+
+      res.status(500).json({ error: 'TTS generation failed' });
+    } catch (err: any) {
+      console.error('[TTS Error]:', err?.message || err);
+      res.status(500).json({ error: 'Failed to generate speech' });
+    }
   });
 
   app.get('/api/announcement', (req, res) => {

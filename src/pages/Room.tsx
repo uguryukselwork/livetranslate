@@ -32,7 +32,7 @@ export default function Room() {
   const {
     profile, theme, soundEnabled, notificationSound, soundVolume, hideProfile, vibrationEnabled,
     savedRooms, addOrUpdateRoom, removeRoom, updateRoomName,
-    chatPattern, appPin, isRoomLockEnabled, lockedRooms, unlockedRooms, unlockRoom, toggleRoomLock
+    chatPattern, appPin, isRoomLockEnabled, lockedRooms, unlockedRooms, unlockRoom, toggleRoomLock, sendVoiceMessage
   } = useStore();
   
   const [roomId, setRoomId] = useState<string | null>(null);
@@ -367,33 +367,25 @@ export default function Room() {
   const partnerEngineRef = useRef<'free' | 'paid'>('free');
   partnerEngineRef.current = partnerMember?.engine ?? 'free';
 
-  // A partner on the free engine sends text only: read their voice sentences aloud here, one after another.
-  // (A partner on VIP sends translated audio, which the player handles.)
+  // Automatically read partner's incoming messages aloud
   const spokenIds = useRef(new Set<string>());
   const lastSpoken = useRef({ text: '', at: 0 });
   const speechQueue = useRef<Promise<void>>(Promise.resolve());
   useEffect(() => {
-    if (!inCall || partnerEngineRef.current !== 'free') return;
     for (const m of messages) {
-      if (!m.is_voice || m.sender_id === profile.id || m.translation_status !== 'completed' || spokenIds.current.has(m.id)) continue;
+      if (m.sender_id === profile.id || m.translation_status !== 'completed' || spokenIds.current.has(m.id)) continue;
       spokenIds.current.add(m.id);
       const text = m.translated_text || m.original_text;
       speechQueue.current = speechQueue.current.then(async () => {
-        if (!inCallRef.current) return;
-        // The same sentence twice in a few seconds is a repeat, not something new to hear
         const key = text.trim().toLocaleLowerCase();
         if (key === lastSpoken.current.text && Date.now() - lastSpoken.current.at < 8000) return;
         lastSpoken.current = { text: key, at: Date.now() };
-        const engine = translatorRef.current;
-        if (engine instanceof BrowserVoiceTranslator) engine.setHeld(true);
-        rememberHeard(text);
         setPartnerCaption(text);
         await speak(text, profile.language);
         setPartnerCaption('');
-        if (engine instanceof BrowserVoiceTranslator) engine.setHeld(false);
       });
     }
-  }, [messages, inCall, partnerMember?.engine]);
+  }, [messages, profile.id, profile.language]);
 
   const openVoiceModes = () => {
     refreshVipStatus();
@@ -641,6 +633,7 @@ export default function Room() {
         onCancelReply={() => setReplyTo(null)}
         onTyping={(typing) => liveRef.current?.setTyping(typing)}
         micBusy={inCall}
+        sendVoice={sendVoiceMessage}
         ref={chatInputRef}
       />
 

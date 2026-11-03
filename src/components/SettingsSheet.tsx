@@ -1,10 +1,11 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { Moon, Palette, Type, Bell, Smartphone, Crown, EyeOff, Download, Play, Camera, ChevronDown, LogOut, Captions, Check } from 'lucide-react';
+import { Moon, Palette, Type, Bell, Smartphone, Crown, EyeOff, Download, Play, Camera, ChevronDown, LogOut, Captions, Check, Volume2, Mic } from 'lucide-react';
 import { useStore } from '../store/useStore';
 import { t, LANGUAGES, plainLanguageName } from '../lib/i18n';
 import { THEMES } from '../lib/themes';
 import { compressImage, playNotificationSound } from '../lib/utils';
+import { speak } from '../lib/voice';
 import { SettingsGroup, SettingsRow, SheetHeader, Toggle, fieldClass, focusRing, primaryButton } from './ui';
 import ThemeSettingsSection from './ThemeSettingsSection';
 import TypographySettingsSection from './TypographySettingsSection';
@@ -64,6 +65,8 @@ export default function SettingsSheet({ open, onClose, room }: SettingsSheetProp
     profile, setProfile, theme, setTheme, soundEnabled, setSoundEnabled,
     notificationSound, setNotificationSound, colorTheme, fontSize, fontFamily,
     isPremium, hideProfile, setHideProfile, vibrationEnabled, setVibrationEnabled,
+    sendVoiceMessage, setSendVoiceMessage,
+    ttsVoiceGender, setTtsVoiceGender, ttsVoiceSpeed, setTtsVoiceSpeed,
     deferredPrompt, setDeferredPrompt,
     soundVolume, setSoundVolume
   } = useStore();
@@ -296,6 +299,95 @@ export default function SettingsSheet({ open, onClose, room }: SettingsSheetProp
                       description="Yeni mesaj gelince telefon titrer."
                       trailing={<Toggle label="Titreşim" checked={vibrationEnabled} onChange={setVibrationEnabled} />}
                     />
+                    <SettingsRow
+                      tone="violet"
+                      icon={<Mic className="w-[18px] h-[18px]" />}
+                      title="Mesajı sesli gönder"
+                      description="Mesajların otomatik seslendirilir."
+                      trailing={<Toggle label="Sesli gönder" checked={sendVoiceMessage} onChange={setSendVoiceMessage} />}
+                    />
+                  </SettingsGroup>
+
+                  <SettingsGroup title="Sesli Yanıt Ayarları (ElevenLabs)">
+                    <div className="px-4 py-3.5 space-y-3">
+                      <div className="flex items-center justify-between">
+                        <span className="text-[15px] font-bold text-(--theme-ink)">Ses Cinsiyeti</span>
+                        <button
+                          type="button"
+                          onClick={() => speak('Merhaba, bu sesli yanıt örneğidir.', lang)}
+                          className={cn('flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[13px] font-bold text-(--theme-accent) hover:bg-(--theme-accent-light) transition-colors cursor-pointer', focusRing)}
+                        >
+                          <Play className="w-3 h-3 fill-current" /> Sesi Dinle
+                        </button>
+                      </div>
+                      <div className="grid grid-cols-2 gap-2">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setTtsVoiceGender('female');
+                            speak('Kız sesi seçildi.', lang);
+                          }}
+                          className={cn(
+                            'py-2.5 px-3 rounded-2xl border-2 text-[13.5px] font-bold transition-all cursor-pointer flex items-center justify-center gap-1.5',
+                            ttsVoiceGender === 'female'
+                              ? 'border-(--theme-accent) bg-(--theme-accent-light) text-(--theme-accent)'
+                              : 'border-(--theme-border) bg-(--theme-subtle-bg) text-(--theme-muted)'
+                          )}
+                        >
+                          👧 Kız Sesi (Rachel)
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setTtsVoiceGender('male');
+                            speak('Erkek sesi seçildi.', lang);
+                          }}
+                          className={cn(
+                            'py-2.5 px-3 rounded-2xl border-2 text-[13.5px] font-bold transition-all cursor-pointer flex items-center justify-center gap-1.5',
+                            ttsVoiceGender === 'male'
+                              ? 'border-(--theme-accent) bg-(--theme-accent-light) text-(--theme-accent)'
+                              : 'border-(--theme-border) bg-(--theme-subtle-bg) text-(--theme-muted)'
+                          )}
+                        >
+                          👦 Erkek Sesi (Adam)
+                        </button>
+                      </div>
+
+                      <div className="space-y-2 pt-1">
+                        <div className="flex justify-between items-center text-[13px] font-bold text-(--theme-ink)">
+                          <span>Okuma Hızı</span>
+                          <span className="text-(--theme-accent) tabular-nums">{ttsVoiceSpeed}x</span>
+                        </div>
+                        <div className="grid grid-cols-4 gap-1.5 p-1 rounded-2xl bg-(--theme-subtle-bg)">
+                          {[
+                            { speed: 0.8, label: 'Yavaş' },
+                            { speed: 1.0, label: 'Normal' },
+                            { speed: 1.2, label: 'Hızlı' },
+                            { speed: 1.4, label: 'Çok Hızlı' }
+                          ].map(opt => {
+                            const selected = Math.abs(ttsVoiceSpeed - opt.speed) < 0.05;
+                            return (
+                              <button
+                                key={opt.speed}
+                                type="button"
+                                onClick={() => {
+                                  setTtsVoiceSpeed(opt.speed);
+                                  speak('Okuma hızı ayarlandı.', lang);
+                                }}
+                                className={cn(
+                                  'py-2 px-1 rounded-xl text-[12.5px] font-bold transition-colors cursor-pointer text-center truncate',
+                                  selected
+                                    ? 'bg-(--theme-card-bg) text-(--theme-accent) shadow-sm'
+                                    : 'text-(--theme-muted) hover:text-(--theme-ink)'
+                                )}
+                              >
+                                {opt.label}
+                              </button>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    </div>
                   </SettingsGroup>
 
                   <SettingsGroup title="Gizlilik">

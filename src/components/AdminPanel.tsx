@@ -301,23 +301,15 @@ export default function AdminPanel({ open, onClose }: { open: boolean; onClose: 
                     </div>
                   </div>
                   
-                  {ACCESS_OPTIONS.map(o => {
+                  {/* Keep ONLY the Ücretsiz option */}
+                  {ACCESS_OPTIONS.filter(o => o.id === 'everyone').map(o => {
                     const selected = overview.vip_access === o.id;
                     return (
-                      <button
+                      <div
                         key={o.id}
-                        type="button"
-                        role="radio"
-                        aria-checked={selected}
-                        disabled={!!busy}
-                        onClick={() => {
-                          if (selected) return;
-                          if (o.id === 'everyone' && !draft.trim()) setDraft(FREE_ANNOUNCEMENT);
-                          void run(`access-${o.id}`, () => adminSetVipAccess(pin, o.id), 'Kaydedildi. Tüm kullanıcılarda yeni görüşmelerden itibaren geçerli.');
-                        }}
                         className={cn(
-                          'w-full text-left rounded-3xl border-2 p-3.5 flex items-center gap-3 transition-colors cursor-pointer disabled:cursor-wait',
-                          selected ? 'border-(--theme-accent) bg-(--theme-accent-light)' : 'border-(--theme-border) bg-(--theme-card-bg) hover:border-(--theme-accent)'
+                          'w-full text-left rounded-3xl border-2 p-3.5 flex items-center gap-3 transition-colors',
+                          selected ? 'border-(--theme-accent) bg-(--theme-accent-light)' : 'border-(--theme-border) bg-(--theme-card-bg)'
                         )}
                       >
                         <span className={cn('w-10 h-10 shrink-0 rounded-2xl flex items-center justify-center', o.tone)}>{o.icon}</span>
@@ -329,9 +321,9 @@ export default function AdminPanel({ open, onClose }: { open: boolean; onClose: 
                           'w-6 h-6 shrink-0 rounded-full border-2 flex items-center justify-center',
                           selected ? 'border-(--theme-accent) bg-(--theme-accent) text-(--theme-on-accent)' : 'border-(--theme-border)'
                         )}>
-                          {busy === `access-${o.id}` ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : selected && <Check className="w-4 h-4" />}
+                          {selected && <Check className="w-4 h-4" />}
                         </span>
-                      </button>
+                      </div>
                     );
                   })}
                 </section>

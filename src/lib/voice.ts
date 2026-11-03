@@ -4,6 +4,7 @@
 import type { Session } from '@google/genai';
 import { GoogleGenAI } from '@google/genai';
 import { getAudioContext } from './utils';
+import { useStore } from '../store/useStore';
 
 const INPUT_RATE = 16000;
 const OUTPUT_RATE = 24000;
@@ -325,17 +326,24 @@ export class VoiceTranslator implements VoiceEngine {
         },
         onerror: (e) => console.warn('Live translate error', e),
         onclose: () => {
-          this.session = null;
+          if (this.session) {
+            try { this.session.close(); } catch {}
+            this.session = null;
+          }
           if (!this.active) return;
+
           if (this.retries++ >= 3) {
-            this.opts.onState('error', 'Sesli çeviri bağlantısı koptu');
+            this.opts.onState('error', 'Sesli çeviri bağlantısı koptu. Lütfen tekrar deneyin.');
             this.stop();
             return;
           }
-          this.opts.onState('connecting');
+
+          // Delay the state change so it's not flickering
           setTimeout(() => {
-            if (this.active) this.connect().catch((err) => {
-              this.opts.onState('error', err instanceof Error ? err.message : String(err));
+            if (!this.active) return;
+            this.opts.onState('connecting');
+            this.connect().catch((err) => {
+              this.opts.onState('error', 'Yeniden bağlanılamadı: ' + (err instanceof Error ? err.message : String(err)));
               this.stop();
             });
           }, 1000 * Math.max(1, this.retries));
@@ -739,13 +747,62 @@ function speakChunk(text: string, locale: string, voice?: SpeechSynthesisVoice):
   });
 }
 
-/** Reads text aloud in the given language with the most natural voice available; resolves when done */
+let isAudioPlaying = false;
+
+function playAudioUrl(url: string, speed = 1.0): Promise<void> {
+  return new Promise((resolve) => {
+    isAudioPlaying = true;
+    const audio = new Audio(url);
+    audio.playbackRate = speed;
+    audio.onended = () => {
+      isAudioPlaying = false;
+      resolve();
+    };
+    audio.onerror = () => {
+      isAudioPlaying = false;
+      resolve();
+    };
+    audio.play().catch(() => {
+      isAudioPlaying = false;
+      resolve();
+    });
+  });
+}
+
+/** Reads text aloud in the given language using ElevenLabs TTS / Natural Neural Voice; resolves when done */
 export async function speak(text: string, lang: string): Promise<void> {
-  if (!('speechSynthesis' in window) || !text.trim()) return;
+  if (!text.trim()) return;
+
+  const cleanText = collapseRepeats(text);
+  const { ttsVoiceGender, ttsVoiceSpeed } = useStore.getState();
+
+  // Try ElevenLabs TTS / High Quality Server Endpoint
+  try {
+    const res = await fetch('/api/tts', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ text: cleanText, lang, voiceGender: ttsVoiceGender }),
+    });
+    if (res.ok) {
+      const blob = await res.blob();
+      if (blob.size > 200) {
+        const url = URL.createObjectURL(blob);
+        await playAudioUrl(url, ttsVoiceSpeed);
+        URL.revokeObjectURL(url);
+        return;
+      }
+    }
+  } catch (err) {
+    console.warn('ElevenLabs TTS API failed, falling back to Web Speech API', err);
+  }
+
+  // Fallback to browser SpeechSynthesis
+  if (!('speechSynthesis' in window)) return;
   const locale = speechLocale(lang);
   const voice = pickVoice(await loadVoices(), locale, lang);
-  for (const chunk of splitForSpeech(collapseRepeats(text))) await speakChunk(chunk, locale, voice);
+  for (const chunk of splitForSpeech(cleanText)) await speakChunk(chunk, locale, voice);
 }
 
 /** True while this phone reads a translation aloud */
-export const isSpeaking = () => typeof window !== 'undefined' && 'speechSynthesis' in window && window.speechSynthesis.speaking;
+export const isSpeaking = () =>
+  isAudioPlaying || (typeof window !== 'undefined' && 'speechSynthesis' in window && window.speechSynthesis.speaking);
